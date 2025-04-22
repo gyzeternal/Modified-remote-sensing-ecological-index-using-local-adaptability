@@ -1,0 +1,11 @@
+library(strucchange)
+library(openxlsx)
+# import data
+data <- read.xlsx("D:/02Person/00ArticleProject/01MovingWindowsRSEI/GRSL修改/02ISA分析/RSEI的ISA.xlsx", sheet = "NMGBT_RSEI_ISA")
+
+# Modeling and Bai-Perron breakpoint detection
+bp_results_x <- breakpoints(y ~ x, data = data) 
+
+# print results
+summary(bp_results_x)
+plot(bp_results_x)

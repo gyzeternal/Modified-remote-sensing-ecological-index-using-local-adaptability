@@ -1,0 +1,80 @@
+# GEE JavaScript
+
+function modify_PCA(image, scale, region) {
+    
+    var bandNames1 = image.bandNames();
+
+  // Mean center the data to enable a faster covariance reducer
+  // and an SD stretch of the principal components.
+    var meanDict = image.reduceRegion({
+        reducer: ee.Reducer.mean(),
+        geometry: region,
+        scale: scale,
+        maxPixels: 1e9
+});
+    var means = ee.Image.constant(meanDict.values(bandNames1));
+    var centered = image.subtract(means);
+
+    var bandNames = centered.bandNames();
+
+    var getNewBandNames = function(prefix) {
+    var seq = ee.List.sequence(1, bandNames.length());
+    return seq.map(function(b) {
+      return ee.String(prefix).cat(ee.Number(b).int());
+    });
+  };
+
+    var arrays = centered.toArray();
+
+    var covar = arrays.reduceRegion({
+      reducer: ee.Reducer.centeredCovariance(),
+      geometry: region,
+      scale: scale,
+      maxPixels: 1e13,
+      tileScale: 16
+    });
+
+    var covarArray = ee.Array(covar.get('array'));
+
+    var eigens = covarArray.eigen();
+
+    var eigenValues = eigens.slice(1, 0, 1);
+
+    var eigenValuesList = eigenValues.toList().flatten();
+    var total = eigenValuesList.reduce(ee.Reducer.sum());
+    var percentageVariance = eigenValuesList.map(function(item) {
+      return (ee.Number(item).divide(total));//.multiply(100).format('%.2f')
+    });
+    var percentageVariance0 = ee.Number(percentageVariance.get(0));
+    var contri = ee.Number(percentageVariance0.divide(total));
+
+    var eigenVectors = eigens.slice(1, 1);
+
+    var arrayImage = arrays.toArray(1);
+
+    var principalComponents = ee.Image(eigenVectors).matrixMultiply(arrayImage);
+
+    var sdImage = ee.Image(eigenValues.sqrt())
+      .arrayProject([0]).arrayFlatten([getNewBandNames('sd')]);
+
+    principalComponents=principalComponents
+
+      .arrayProject([0])
+
+      .arrayFlatten([getNewBandNames('pc')])
+
+      .divide(sdImage);
+      var pc1 = principalComponents.select('pc1');
+    var eigenVectorsvalue1 = ee.Number(ee.List(eigenVectors.toList().get(0)).get(0));
+    var eigenVectorsvalue2 = ee.Number(ee.List(eigenVectors.toList().get(0)).get(1));
+    var num1 = eigenVectorsvalue1.lte(0);
+    var num2 = eigenVectorsvalue2.lte(0);
+    var num = num1.multiply(num2);
+    var principalComponents1 = ee.Algorithms.If({
+        condition: ee.Algorithms.IsEqual(num, 1),
+        trueCase: pc1.multiply(ee.Image.constant(-1)),
+        falseCase: pc1,
+    });
+    var rsei = ee.Image(principalComponents1);
+    return rsei;
+  }

@@ -6,4 +6,9 @@ Assessing ecological environment quality (EEQ) using satellite observations is c
 Demo:
 https://code.earthengine.google.com/517b7cfe82184caab4723135c8ca72ff
 
-This script implements the MRSEILA model (Modified Remote Sensing-based Ecological Index with Local Adaptability) in Google Earth Engine. It performs localized PCA within moving windows centered on sample points to derive the first principal component (PC1) from four normalized remote sensing indicators (NDVI, WET, NDBSI, LST). The PCA direction is corrected to ensure consistency. The study area is divided into grid cells, and for each cell, the resulting PC1 image is exported, enabling spatially adaptive ecological assessment.
+This script implements the MRSEILA model (Modified Remote Sensing-based Ecological Index with Local Adaptability) in Google Earth Engine. It performs improved PCA within moving windows centered on sample points to derive the first principal component (PC1) from four normalized remote sensing indicators (NDVI, WET, NDBSI, LST). The PC1 eigenvector direction is corrected to ensure consistency. The study area is divided into grid cells, and for each cell, the resulting PC1 image is exported, enabling spatially adaptive ecological assessment.
+
+Contact Info.:
+Yingzhang Guo 
+Fujian Mapping Institute
+Eamil: gyzeternal@outlook.com

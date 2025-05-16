@@ -1,0 +1,106 @@
+import geopandas as gpd
+import numpy as np
+import pandas as pd
+from sklearn.neighbors import KDTree
+from scipy.spatial.distance import pdist, squareform
+
+# === 参数设置 ===
+shapefile_path = r"D:\GYZ_Article\各项性\RasterToPointsClipNor\FJNY_NDVI_clip_nor.shp"  # 替换为你的路径
+variables = ['NDVI']                  # 变量列表，可扩展为 ['NDVI', 'wet', 'ndbsi', 'lst']
+circle_radius = 6000                 # 圆形窗口半径（单位：米）
+square_half_length = 5340           # 方形窗口半边长（边长 = 10680 米）
+min_points = 20                     # 每个窗口内最少点数
+sample_count = 1000                  # 均匀抽样中心点数量
+max_samples_per_window = 500        # 每个窗口内最大抽样点数，避免pdist过慢
+angle_intervals = np.deg2rad(np.arange(0, 180, 22.5))  # 方向划分，每22.5度一个方向，共8个方向
+
+# === 读取点矢量数据并统一投影 ===
+gdf = gpd.read_file(shapefile_path)
+gdf = gdf.to_crs(epsg=32650)  # 投影为米，便于计算空间距离
+coords = np.array([(geom.x, geom.y) for geom in gdf.geometry])
+tree = KDTree(coords)
+
+# === 抽样1000个中心点索引（均匀）===
+total_points = len(gdf)
+indices = np.linspace(0, total_points - 1, sample_count, dtype=int)
+
+# === 各向异性计算函数（方向变程CV） ===
+def calculate_anisotropy_cv(points, values, max_samples=500):
+    """
+    对某窗口内的数据点，按不同方向计算变程，并输出变程CV（方向变程标准差 / 均值）
+    如点数超过 max_samples，则随机抽样以加快计算
+    """
+    if len(points) < min_points:
+        return np.nan
+
+    # 限制最大点数（采样）
+    if len(points) > max_samples:
+        sampled_idx = np.random.choice(len(points), max_samples, replace=False)
+        points = points[sampled_idx]
+        values = values[sampled_idx]
+
+    variances = []
+    for angle in angle_intervals:
+        dx, dy = np.cos(angle), np.sin(angle)
+        projections = points @ np.array([dx, dy])
+        dists = squareform(pdist(projections.reshape(-1, 1)))
+        diffs = squareform(pdist(values.reshape(-1, 1), metric='sqeuclidean'))
+        mask = (dists > 0) & (dists < 1000)  # 限制方向变程分析的距离范围
+        if np.sum(mask) > 10:
+            variances.append(np.mean(diffs[mask]))
+    if len(variances) < 2:
+        return np.nan
+    return np.std(variances) / np.mean(variances)
+
+# === 主循环：每个中心点分别计算圆形与方形窗口的CV值 ===
+results = []
+
+for idx in indices:
+    center = coords[idx]
+    x, y = center
+    # 圆形窗口
+    idx_circle = tree.query_radius([center], r=circle_radius)[0]
+    coords_circle = coords[idx_circle]
+
+    # 方形窗口（边界筛选）
+    square_mask = (
+        (coords[:, 0] >= x - square_half_length) & (coords[:, 0] <= x + square_half_length) &
+        (coords[:, 1] >= y - square_half_length) & (coords[:, 1] <= y + square_half_length)
+    )
+    idx_square = np.where(square_mask)[0]
+    coords_square = coords[idx_square]
+
+    for var in variables:
+        vals_circle = gdf.iloc[idx_circle][var].values
+        vals_square = gdf.iloc[idx_square][var].values
+
+        # 分别计算方向变程CV
+        if len(vals_circle) >= min_points and not np.isnan(vals_circle).any():
+            cv_circle = calculate_anisotropy_cv(coords_circle, vals_circle, max_samples=max_samples_per_window)
+        else:
+            cv_circle = np.nan
+
+        if len(vals_square) >= min_points and not np.isnan(vals_square).any():
+            cv_square = calculate_anisotropy_cv(coords_square, vals_square, max_samples=max_samples_per_window)
+        else:
+            cv_square = np.nan
+
+        results.append({
+            "center_index": idx,
+            "variable": var,
+            "cv_circle": cv_circle,
+            "cv_square": cv_square,
+            "cv_difference": cv_square - cv_circle if pd.notna(cv_circle) and pd.notna(cv_square) else np.nan
+        })
+
+# === 输出结果 ===
+df_result = pd.DataFrame(results)
+print("计算完成")
+
+df_fjly_ndvi = df_result
+print("样本数量：", len(df_fjly_ndvi))
+print("平均 CV（圆形窗口）：", df_fjly_ndvi['cv_circle'].mean())
+print("平均 CV（方形窗口）：", df_fjly_ndvi['cv_square'].mean())
+print("平均差值（方-圆）：", df_fjly_ndvi['cv_difference'].mean())
+print("有多少个点圆形更好（CV更小）：", (df_fjly_ndvi['cv_difference'] > 0).sum())
+print("有多少个点方形更好（CV更小）：", (df_fjly_ndvi['cv_difference'] < 0).sum())

@@ -1,3 +1,12 @@
+# This Python script is designed to quantitatively assess spatial anisotropy of ecological indicators by comparing circular and square moving windows using Landsat-derived point data. Specifically, the script calculates the directional variogram coefficient of variation (CV) for NDVI values within each window shape.
+
+# A total of 1000 center points are uniformly sampled from the input shapefile (FJNY_NDVI_clip_nor.shp). For each center point, the script constructs two spatial windows: a circular window with a radius of 6000 meters and a square window with a side length of 10,680 meters (equivalent area). Within each window, up to 500 points are randomly sampled to control computational complexity.
+
+# For each window, the script computes directional semivariograms at 8 angular intervals (every 22.5°) and derives the coefficient of variation (CV) across directions. A lower CV indicates stronger spatial isotropy. This process is repeated for all sampled locations, and the script outputs a comparison of CV values between circular and square windows for each point.
+
+# Summary statistics, including mean CV values and the number of cases where the circular window outperforms the square window (i.e., lower CV), are also reported.
+
+
 import geopandas as gpd
 import numpy as np
 import pandas as pd
